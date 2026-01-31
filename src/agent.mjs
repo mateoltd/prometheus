@@ -81,19 +81,37 @@ export async function runCycle(client, systemPrompt, userMessage, cycleNum, chec
         console.log(`   [tool] ${toolCall.function.name}`);
         const result = await executeToolCall(toolCall.function.name, args);
 
+        // Strip _image from trace to avoid bloating the log
+        const traceResult = result._image
+          ? { ...result, _image: `[base64 JPEG, ${result._image.length} chars]` }
+          : result;
         trace(cycleNum, "tool_call", {
           turn: i,
           tool_call_id: toolCall.id,
           name: toolCall.function.name,
           arguments: args,
-          result,
+          result: traceResult,
         });
 
-        messages.push({
-          role: "tool",
-          tool_call_id: toolCall.id,
-          content: JSON.stringify(result),
-        });
+        // If tool returned an image, send it as multi-part content for vision
+        if (result._image) {
+          const base64 = result._image;
+          delete result._image;
+          messages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: [
+              { type: "text", text: JSON.stringify(result) },
+              { type: "image_url", image_url: { url: `data:image/jpeg;base64,${base64}` } },
+            ],
+          });
+        } else {
+          messages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: JSON.stringify(result),
+          });
+        }
       }
 
       // Checkpoint after every completed turn (all tool results appended)

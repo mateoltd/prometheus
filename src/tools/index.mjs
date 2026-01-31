@@ -14,6 +14,10 @@ import {
   definitions as sysDefs,
   handlers as sysHandlers,
 } from "./system.mjs";
+import {
+  definitions as desktopDefs,
+  handlers as desktopHandlers,
+} from "./desktop.mjs";
 
 // Build flat tool definitions array for the OpenAI API
 export const TOOL_DEFINITIONS = [
@@ -21,6 +25,7 @@ export const TOOL_DEFINITIONS = [
   ...fsDefs,
   httpDef,
   ...sysDefs,
+  ...desktopDefs,
 ];
 
 // Build dispatch map: name -> handler
@@ -33,6 +38,15 @@ const dispatch = {
   http_request: httpHandler,
   get_system_info: sysHandlers.get_system_info,
   list_processes: sysHandlers.list_processes,
+  screenshot: desktopHandlers.screenshot,
+  mouse_move: desktopHandlers.mouse_move,
+  mouse_click: desktopHandlers.mouse_click,
+  mouse_scroll: desktopHandlers.mouse_scroll,
+  keyboard_type: desktopHandlers.keyboard_type,
+  keyboard_hotkey: desktopHandlers.keyboard_hotkey,
+  get_screen_size: desktopHandlers.get_screen_size,
+  list_windows: desktopHandlers.list_windows,
+  focus_window: desktopHandlers.focus_window,
 };
 
 /**
