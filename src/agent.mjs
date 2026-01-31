@@ -28,7 +28,7 @@ export async function runCycle(client, systemPrompt, userMessage, cycleNum, chec
   let messages;
   let startTurn;
   let cumulativeTokens = 0;
-  const CONTEXT_WINDOW = 128_000; // Haiku's context limit
+  const CONTEXT_WINDOW = 128_000;
   const WRAP_UP_THRESHOLD = 110_000; // Interrupt model at 110k to leave ~18k for wrap-up
   let wrapUpMessageSent = false;
   const modelResponses = []; // Collect responses for window summary
