@@ -50,6 +50,40 @@ export function updateAnalytics(success) {
   return stats;
 }
 
+// --- Checkpoints ---
+
+/**
+ * Save a mid-cycle checkpoint. Uses atomic write (tmp + rename)
+ * so a crash during the write itself never corrupts the checkpoint.
+ */
+export function saveCheckpoint(data) {
+  const tmp = CONFIG.CHECKPOINT_FILE + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(data));
+  fs.renameSync(tmp, CONFIG.CHECKPOINT_FILE);
+}
+
+/**
+ * Load checkpoint if one exists. Returns the checkpoint data or null.
+ */
+export function loadCheckpoint() {
+  if (!fs.existsSync(CONFIG.CHECKPOINT_FILE)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(CONFIG.CHECKPOINT_FILE, "utf8"));
+  } catch {
+    // Corrupted checkpoint - discard it
+    clearCheckpoint();
+    return null;
+  }
+}
+
+/**
+ * Remove checkpoint after a cycle completes successfully.
+ */
+export function clearCheckpoint() {
+  try { fs.unlinkSync(CONFIG.CHECKPOINT_FILE); } catch {}
+  try { fs.unlinkSync(CONFIG.CHECKPOINT_FILE + ".tmp"); } catch {}
+}
+
 /**
  * Create a snapshot of manifesto and memory every SNAPSHOT_INTERVAL cycles.
  */

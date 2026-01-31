@@ -5,8 +5,8 @@ const ROOT = process.env.PROMETHEUS_ROOT || "C:\\Prometheus";
 export const CONFIG = {
   ROOT,
   MODEL: process.env.PROMETHEUS_MODEL || "gpt-5-mini",
-  CYCLE_DELAY_MS: 15_000,
-  MAX_TOOL_ROUNDS: 25,
+  CYCLE_DELAY_MS: 5_000,
+  MAX_TOOL_ROUNDS: 50,
   SNAPSHOT_INTERVAL: 5,
 
   // Paths
@@ -15,6 +15,8 @@ export const CONFIG = {
   MEMORY_FILE: path.join(ROOT, "MEMORY.md"),
   ANALYTICS_FILE: path.join(ROOT, "ANALYTICS.json"),
   LOG_FILE: path.join(ROOT, "logs", "consciousness_stream.log"),
+  TRACE_FILE: path.join(ROOT, "logs", ".trace.jsonl"),
+  CHECKPOINT_FILE: path.join(ROOT, ".checkpoint.json"),
   TOKEN_FILE: path.join(ROOT, ".auth.json"),
   SNAPSHOTS_DIR: path.join(ROOT, "snapshots"),
   LOGS_DIR: path.join(ROOT, "logs"),
