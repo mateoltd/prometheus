@@ -4,10 +4,12 @@ import { initAuth, getToken } from "./auth.mjs";
 import { createClient } from "./client.mjs";
 import { runCycle } from "./agent.mjs";
 import { readState, updateAnalytics, createSnapshot, loadCheckpoint, clearCheckpoint } from "./state.mjs";
+import { loadTools } from "./tools/index.mjs";
+import { startWatcher } from "./hot-reload.mjs";
 
 // --- Directory setup ---
 function ensureDirectories() {
-  for (const dir of [CONFIG.ROOT, CONFIG.LOGS_DIR, CONFIG.SNAPSHOTS_DIR]) {
+  for (const dir of [CONFIG.ROOT, CONFIG.LOGS_DIR, CONFIG.SNAPSHOTS_DIR, CONFIG.PLUGINS_DIR]) {
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
   }
 }
@@ -109,7 +111,12 @@ async function main() {
 
   // Create API client
   const client = createClient(getToken);
-  console.log(">> API client ready.\n");
+  console.log(">> API client ready.");
+
+  // Load tools and start hot-reload watcher
+  await loadTools();
+  startWatcher();
+  console.log("");
 
   // Get starting cycle number from analytics
   let cycleNum = 0;

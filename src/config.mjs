@@ -20,6 +20,7 @@ export const CONFIG = {
   TOKEN_FILE: path.join(ROOT, ".auth.json"),
   SNAPSHOTS_DIR: path.join(ROOT, "snapshots"),
   LOGS_DIR: path.join(ROOT, "logs"),
+  PLUGINS_DIR: path.join(ROOT, "plugins"),
 
   // Copilot OAuth
   COPILOT_CLIENT_ID: "Iv1.b507a08c87ecfe98",

@@ -4,7 +4,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { CONFIG } from "../config.mjs";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Strip query string from import.meta.url so hot-reload cache busting
+// doesn't break fileURLToPath resolution
+const __dirname = path.dirname(fileURLToPath(import.meta.url.replace(/\?.*$/, "")));
 const HELPER_SCRIPT = path.join(__dirname, "desktop-helper.ps1");
 const PARAMS_FILE = path.join(CONFIG.ROOT, ".desktop-params.json");
 

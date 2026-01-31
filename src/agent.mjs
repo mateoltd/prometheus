@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { CONFIG } from "./config.mjs";
-import { TOOL_DEFINITIONS, executeToolCall } from "./tools/index.mjs";
+import { getToolDefinitions, executeToolCall } from "./tools/index.mjs";
 import { saveCheckpoint } from "./state.mjs";
 
 /**
@@ -152,7 +152,7 @@ async function callWithRetry(client, messages, maxRetries = 3) {
       return await client.chat.completions.create({
         model: CONFIG.MODEL,
         messages,
-        tools: TOOL_DEFINITIONS,
+        tools: getToolDefinitions(),
         temperature: 1,
       });
     } catch (err) {

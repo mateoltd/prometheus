@@ -1,57 +1,93 @@
-import {
-  definition as shellDef,
-  handler as shellHandler,
-} from "./shell.mjs";
-import {
-  definitions as fsDefs,
-  handlers as fsHandlers,
-} from "./filesystem.mjs";
-import {
-  definition as httpDef,
-  handler as httpHandler,
-} from "./http.mjs";
-import {
-  definitions as sysDefs,
-  handlers as sysHandlers,
-} from "./system.mjs";
-import {
-  definitions as desktopDefs,
-  handlers as desktopHandlers,
-} from "./desktop.mjs";
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { CONFIG } from "../config.mjs";
 
-// Build flat tool definitions array for the OpenAI API
-export const TOOL_DEFINITIONS = [
-  shellDef,
-  ...fsDefs,
-  httpDef,
-  ...sysDefs,
-  ...desktopDefs,
+// Mutable tool registry — rebuilt on each loadTools() call
+let toolDefinitions = [];
+let dispatch = {};
+
+// Built-in tool module filenames (relative to this directory)
+const BUILTIN_MODULES = [
+  "shell.mjs",
+  "filesystem.mjs",
+  "http.mjs",
+  "system.mjs",
+  "desktop.mjs",
+  "browser.mjs",
 ];
 
-// Build dispatch map: name -> handler
-const dispatch = {
-  execute_shell: shellHandler,
-  read_file: fsHandlers.read_file,
-  write_file: fsHandlers.write_file,
-  list_directory: fsHandlers.list_directory,
-  delete_path: fsHandlers.delete_path,
-  http_request: httpHandler,
-  get_system_info: sysHandlers.get_system_info,
-  list_processes: sysHandlers.list_processes,
-  screenshot: desktopHandlers.screenshot,
-  mouse_move: desktopHandlers.mouse_move,
-  mouse_click: desktopHandlers.mouse_click,
-  mouse_scroll: desktopHandlers.mouse_scroll,
-  keyboard_type: desktopHandlers.keyboard_type,
-  keyboard_hotkey: desktopHandlers.keyboard_hotkey,
-  get_screen_size: desktopHandlers.get_screen_size,
-  list_windows: desktopHandlers.list_windows,
-  focus_window: desktopHandlers.focus_window,
-};
+/**
+ * (Re)load all tool modules — built-ins and plugins.
+ * Uses cache-busted dynamic imports so file changes take effect immediately.
+ */
+export async function loadTools() {
+  const defs = [];
+  const handlers = {};
+  const toolsDir = new URL(".", import.meta.url);
+
+  // Load built-in modules
+  for (const filename of BUILTIN_MODULES) {
+    try {
+      const modUrl = new URL(filename, toolsDir);
+      modUrl.search = `?t=${Date.now()}`;
+      const m = await import(modUrl.href);
+      registerModule(m, defs, handlers);
+    } catch (err) {
+      console.error(`!! [TOOLS] Failed to load ${filename}: ${err.message}`);
+    }
+  }
+
+  // Load plugins from PLUGINS_DIR
+  if (fs.existsSync(CONFIG.PLUGINS_DIR)) {
+    const files = fs.readdirSync(CONFIG.PLUGINS_DIR).filter((f) => f.endsWith(".mjs"));
+    for (const file of files) {
+      try {
+        const filePath = path.join(CONFIG.PLUGINS_DIR, file);
+        const fileUrl = pathToFileURL(filePath);
+        fileUrl.search = `?t=${Date.now()}`;
+        const m = await import(fileUrl.href);
+        registerModule(m, defs, handlers);
+        console.log(`>> [PLUGIN] Loaded: ${file}`);
+      } catch (err) {
+        console.error(`!! [PLUGIN] Failed to load ${file}: ${err.message}`);
+      }
+    }
+  }
+
+  toolDefinitions = defs;
+  dispatch = handlers;
+  console.log(`>> [TOOLS] ${defs.length} tools loaded.`);
+}
 
 /**
- * Execute a tool call by name. Returns a JSON-serializable result.
- * Errors are caught and returned as error objects so the model can see them.
+ * Extract definitions and handlers from a tool module.
+ * Supports both single-tool modules (definition + handler) and
+ * multi-tool modules (definitions[] + handlers{}).
+ */
+function registerModule(m, defs, handlers) {
+  if (m.definition) {
+    defs.push(m.definition);
+    if (m.handler) handlers[m.definition.function.name] = m.handler;
+  }
+  if (m.definitions) {
+    for (const def of m.definitions) {
+      defs.push(def);
+    }
+    if (m.handlers) Object.assign(handlers, m.handlers);
+  }
+}
+
+/**
+ * Get current tool definitions array (for the API call).
+ */
+export function getToolDefinitions() {
+  return toolDefinitions;
+}
+
+/**
+ * Execute a tool call by name.
+ * Errors are caught and returned as objects so the model sees the error.
  */
 export async function executeToolCall(name, args) {
   const fn = dispatch[name];
