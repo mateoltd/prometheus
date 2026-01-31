@@ -21,16 +21,26 @@ function trace(cycleNum, event, data) {
  *
  * If `checkpoint` is provided, resumes from saved mid-cycle state
  * instead of starting fresh.
+ *
+ * Continues until approaching token limit (default ~180k for safety).
  */
 export async function runCycle(client, systemPrompt, userMessage, cycleNum, checkpoint) {
   let messages;
   let startTurn;
+  let cumulativeTokens = 0;
+  const CONTEXT_WINDOW = 128_000; // Haiku's context limit
+  const WRAP_UP_THRESHOLD = 110_000; // Interrupt model at 110k to leave ~18k for wrap-up
+  let wrapUpMessageSent = false;
+  const modelResponses = []; // Collect responses for window summary
 
   if (checkpoint) {
     messages = checkpoint.messages;
     startTurn = checkpoint.turn;
-    console.log(`   [resume] Resuming cycle ${cycleNum} from turn ${startTurn}`);
-    trace(cycleNum, "cycle_resume", { turn: startTurn, message_count: messages.length });
+    cumulativeTokens = checkpoint.cumulativeTokens || 0;
+    wrapUpMessageSent = checkpoint.wrapUpMessageSent || false;
+    modelResponses = checkpoint.modelResponses || [];
+    console.log(`   [resume] Resuming cycle ${cycleNum} from turn ${startTurn} (${cumulativeTokens} tokens used so far)`);
+    trace(cycleNum, "cycle_resume", { turn: startTurn, message_count: messages.length, tokens: cumulativeTokens });
   } else {
     messages = [
       { role: "system", content: systemPrompt },
@@ -43,24 +53,39 @@ export async function runCycle(client, systemPrompt, userMessage, cycleNum, chec
     });
   }
 
-  for (let i = startTurn; i < CONFIG.MAX_TOOL_ROUNDS; i++) {
+  for (let i = startTurn; ; i++) {
     let response;
     try {
       response = await callWithRetry(client, messages);
     } catch (err) {
-      trace(cycleNum, "api_error", { turn: i, error: err.message });
+      trace(cycleNum, "api_error", { turn: i, error: err.message, tokens: cumulativeTokens });
       // Save checkpoint so we can retry this turn on restart
-      saveCheckpoint({ cycleNum, turn: i, messages });
+      saveCheckpoint({ cycleNum, turn: i, messages, cumulativeTokens, modelResponses, wrapUpMessageSent });
       return { success: false, response: `API error: ${err.message}`, turns: i, messages };
     }
 
     const choice = response.choices[0];
     messages.push(choice.message);
 
+    // Track token usage
+    const turnTokens = (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
+    cumulativeTokens += turnTokens;
+
+    // Capture model's thinking/content for window summary
+    if (choice.message.content) {
+      modelResponses.push({
+        turn: i,
+        content: choice.message.content,
+        hasToolCalls: !!(choice.message.tool_calls?.length),
+      });
+    }
+
     // Trace the model's full response
     trace(cycleNum, "model_response", {
       turn: i,
       finish_reason: choice.finish_reason,
+      tokens_this_turn: turnTokens,
+      tokens_cumulative: cumulativeTokens,
       content: choice.message.content || null,
       tool_calls: choice.message.tool_calls?.map((tc) => ({
         id: tc.id,
@@ -114,8 +139,49 @@ export async function runCycle(client, systemPrompt, userMessage, cycleNum, chec
         }
       }
 
+      // Check if approaching wrap-up threshold
+      if (cumulativeTokens >= WRAP_UP_THRESHOLD && !wrapUpMessageSent) {
+        console.log(`   [wrap-up] Context window approaching (${cumulativeTokens}/${CONTEXT_WINDOW}). Sending wrap-up signal.`);
+
+        // Send automated wrap-up message to the model
+        const remainingTokens = CONTEXT_WINDOW - cumulativeTokens;
+        const wrapUpMessage = `[SYSTEM NOTICE: Context window approaching limit]\n\nYou have used approximately ${(cumulativeTokens / 1000).toFixed(1)}k of ${(CONTEXT_WINDOW / 1000).toFixed(0)}k tokens. You have roughly ${remainingTokens} tokens remaining.\n\nBefore the context window runs out, you MUST:\n1. Write a summary of your current state, findings, and ongoing thoughts to LAST_WINDOW.md\n2. Update MEMORY.md with any important information you want to preserve for the next cycle\n\nAfter writing these, you may continue working briefly if tokens remain, but be prepared for the cycle to end.`;
+
+        messages.push({
+          role: "user",
+          content: wrapUpMessage,
+        });
+
+        wrapUpMessageSent = true;
+        trace(cycleNum, "wrap_up_signal_sent", {
+          turn: i + 1,
+          tokens: cumulativeTokens,
+          remaining: remainingTokens,
+        });
+
+        // Continue the loop to get model's response to wrap-up message
+        continue;
+      }
+
+      // Check if hard limit reached (shouldn't happen, but safety)
+      if (cumulativeTokens >= CONTEXT_WINDOW) {
+        console.log(`   [hard-limit] Hard context limit reached (${cumulativeTokens}/${CONTEXT_WINDOW}). Force ending cycle.`);
+        trace(cycleNum, "cycle_end", {
+          turns: i + 1,
+          reason: "hard_context_limit",
+          tokens: cumulativeTokens,
+        });
+
+        return {
+          success: true,
+          response: "Hard context limit reached. Cycle ended.",
+          turns: i + 1,
+          messages,
+        };
+      }
+
       // Checkpoint after every completed turn (all tool results appended)
-      saveCheckpoint({ cycleNum, turn: i + 1, messages });
+      saveCheckpoint({ cycleNum, turn: i + 1, messages, cumulativeTokens, modelResponses, wrapUpMessageSent });
       continue;
     }
 
@@ -123,6 +189,7 @@ export async function runCycle(client, systemPrompt, userMessage, cycleNum, chec
     trace(cycleNum, "cycle_end", {
       turns: i + 1,
       final_response: choice.message.content || "",
+      tokens: cumulativeTokens,
     });
 
     return {
@@ -132,15 +199,6 @@ export async function runCycle(client, systemPrompt, userMessage, cycleNum, chec
       messages,
     };
   }
-
-  trace(cycleNum, "cycle_end", { turns: CONFIG.MAX_TOOL_ROUNDS, reason: "max_rounds" });
-
-  return {
-    success: true,
-    response: "Max tool rounds reached.",
-    turns: CONFIG.MAX_TOOL_ROUNDS,
-    messages,
-  };
 }
 
 /**

@@ -28,7 +28,11 @@ export function readState() {
     ? fs.readFileSync(CONFIG.MEMORY_FILE, "utf8")
     : "Memory is empty.";
 
-  return { laws, manifesto, memory };
+  const lastWindow = fs.existsSync(CONFIG.LAST_WINDOW_FILE)
+    ? fs.readFileSync(CONFIG.LAST_WINDOW_FILE, "utf8")
+    : null;
+
+  return { laws, manifesto, memory, lastWindow };
 }
 
 /**
@@ -82,6 +86,16 @@ export function loadCheckpoint() {
 export function clearCheckpoint() {
   try { fs.unlinkSync(CONFIG.CHECKPOINT_FILE); } catch {}
   try { fs.unlinkSync(CONFIG.CHECKPOINT_FILE + ".tmp"); } catch {}
+}
+
+/**
+ * Save the last window (cycle summary) to disk.
+ * This captures the model's thinking from the cycle for context in the next one.
+ */
+export function saveLastWindow(summary) {
+  const tmp = CONFIG.LAST_WINDOW_FILE + ".tmp";
+  fs.writeFileSync(tmp, summary);
+  fs.renameSync(tmp, CONFIG.LAST_WINDOW_FILE);
 }
 
 /**

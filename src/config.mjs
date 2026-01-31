@@ -13,6 +13,7 @@ export const CONFIG = {
   LAWS_FILE: path.join(ROOT, "SYSTEM_LAWS.md"),
   MANIFESTO_FILE: path.join(ROOT, "SELF_MANIFESTO.md"),
   MEMORY_FILE: path.join(ROOT, "MEMORY.md"),
+  LAST_WINDOW_FILE: path.join(ROOT, "LAST_WINDOW.md"),
   ANALYTICS_FILE: path.join(ROOT, "ANALYTICS.json"),
   LOG_FILE: path.join(ROOT, "logs", "consciousness_stream.log"),
   TRACE_FILE: path.join(ROOT, "logs", ".trace.jsonl"),

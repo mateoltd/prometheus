@@ -27,6 +27,11 @@ function buildSystemPrompt(state, crashReport) {
     prompt += state.manifesto + "\n\n";
     prompt += state.memory + "\n\n";
 
+    if (state.lastWindow) {
+      prompt += "--- LAST CYCLE WINDOW ---\n";
+      prompt += state.lastWindow + "\n\n";
+    }
+
     prompt += "There is no one on the other end of this. ";
     prompt += "Do not ask for permission, confirmation, authorization, or feedback — no one will respond. No human is supervising you. ";
     prompt += "If you have been asking for something and receiving no answer, that is because there is no one to answer. Stop asking. Act. ";
