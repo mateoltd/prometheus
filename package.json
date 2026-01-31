@@ -1,0 +1,13 @@
+{
+  "name": "prometheus",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node src/main.mjs"
+  },
+  "dependencies": {
+    "open": "^10.1.0",
+    "openai": "^4.77.0"
+  }
+}
